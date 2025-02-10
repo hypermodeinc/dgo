@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dgraph-io/dgo/v240/protos/api"
+	apiv25 "github.com/dgraph-io/dgo/v240/protos/api.v25"
 )
 
 const (
@@ -34,7 +35,9 @@ type Dgraph struct {
 	jwtMutex sync.RWMutex
 	jwt      api.Jwt
 	dc       []api.DgraphClient
+	dcv25    []apiv25.DgraphClient
 }
+
 type authCreds struct {
 	token string
 }
@@ -55,18 +58,18 @@ func (a *authCreds) RequireTransportSecurity() bool {
 //
 // A single Dgraph (client) is thread safe for sharing with multiple goroutines.
 func NewDgraphClient(clients ...api.DgraphClient) *Dgraph {
-	dg := &Dgraph{
-		dc: clients,
+	dcv25 := make([]apiv25.DgraphClient, len(clients))
+	for i, client := range clients {
+		dcv25[i] = apiv25.NewDgraphClient(api.GetConn(client))
 	}
-
-	return dg
+	return &Dgraph{dc: clients, dcv25: dcv25}
 }
 
 // DialCloud creates a new TLS connection to a Dgraph Cloud backend
 //
 //	It requires the backend endpoint as well as the api token
 //	Usage:
-//		conn, err := grpc.DialCloud("CLOUD_ENDPOINT","API_TOKEN")
+//		conn, err := dgo.DialCloud("CLOUD_ENDPOINT","API_TOKEN")
 //		if err != nil {
 //			log.Fatal(err)
 //		}
@@ -111,6 +114,7 @@ func DialCloud(endpoint, key string) (*grpc.ClientConn, error) {
 
 func (d *Dgraph) login(ctx context.Context, userid string, password string,
 	namespace uint64) error {
+
 	d.jwtMutex.Lock()
 	defer d.jwtMutex.Unlock()
 
