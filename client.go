@@ -15,14 +15,26 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/dgo/v240/protos/api"
+	"github.com/dgraph-io/ristretto/v2/z"
+	"github.com/golang/glog"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/dgraph-io/dgo/v240/protos/api"
+	// "github.com/dgraph-io/dgraph/protos/pb"
+	// "github.com/dgraph-io/dgo/v240/protos/api"
+	// "github.com/dgraph-io/dgraph/protos/pb"
+	// "github.com/dgraph-io/dgraph/protos/pb"
+	// "github.com/dgraph-io/dgo/x"
+	// "github.com/dgraph-io/dgo/x"
+	// pb "github.com/dgraph-io/dgraph/v24/protos/pb"
+	// worker "github.com/dgraph-io/dgraph/v24/worker"
+	// db ""
 )
 
 const (
@@ -139,6 +151,60 @@ func (d *Dgraph) GetJwt() api.Jwt {
 // default namespace (0). Valid for the duration the client is alive.
 func (d *Dgraph) Login(ctx context.Context, userid string, password string) error {
 	return d.login(ctx, userid, password, 0)
+}
+
+func (d *Dgraph) InitiateSnapShotStream() (*api.SnapShotStreamResponse, error) {
+	dc := d.anyClient()
+
+	return dc.InitiateSnapShotStream(context.Background(), &api.InitiateSnapShotStreamRequest{Pdirstatus: true})
+}
+
+// we will get p dir location here
+func (d *Dgraph) StreamSnapshot(pdir string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dc := d.anyClient()
+	out, err := dc.StreamPSnapshot(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	opt := badger.DefaultOptions(pdir)
+	ps, err := badger.Open(opt)
+	if err != nil {
+		return err
+	}
+	stream := ps.NewStream()
+	stream.LogPrefix = "Sending Snapshot"
+	stream.KeyToList = nil
+
+	stream.Send = func(buf *z.Buffer) error {
+		kvs := &api.KVS{Data: buf.Bytes()}
+		return out.Send(kvs)
+	}
+	if err := stream.Orchestrate(out.Context()); err != nil {
+		return err
+	}
+
+	// / Indicate that sending is done.
+	done := &api.KVS{
+		Done:       true,
+		Predicates: []string{},
+		Types:      []string{},
+	}
+	if err := out.Send(done); err != nil {
+		return err
+	}
+	glog.Infof("Streaming done. Waiting for ACK...")
+
+	ack, err := out.CloseAndRecv()
+	if err != nil {
+		return err
+	}
+	glog.Infof("Received ACK with done: %v\n", ack.Message)
+	return nil
+
 }
 
 // LoginIntoNamespace logs in the current client using the provided credentials.

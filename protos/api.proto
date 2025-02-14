@@ -24,6 +24,42 @@ service Dgraph {
 	rpc Alter (Operation)          returns (Payload) {}
 	rpc CommitOrAbort (TxnContext) returns (TxnContext) {}
 	rpc CheckVersion(Check)        returns (Version) {}
+	rpc InitiateSnapShotStream (InitiateSnapShotStreamRequest)    returns (SnapShotStreamResponse) {}
+	rpc StreamPSnapshot(stream KVS) returns (Ack) {}
+}
+
+message Ack {
+    string message = 1;
+}
+
+message KVS {
+  bytes data = 5;
+
+  // done used to indicate if the stream of KVS is over.
+  bool done = 2;
+  // predicates is the list of predicates known by the leader at the time of the
+  // snapshot.
+  repeated string predicates = 3;
+  // types is the list of types known by the leader at the time of the snapshot.
+  repeated string types = 4;
+}
+
+message Snapshot {
+  RaftContext context = 1;
+  uint64 index = 2;
+  uint64 read_ts = 3;
+  // done is used to indicate that snapshot stream was a success.
+  bool done = 4;
+  // since_ts stores the ts of the last snapshot to support diff snap updates.
+  uint64 since_ts = 5;
+}
+
+message RaftContext {
+  fixed64 id = 1;
+  uint32 group = 2;
+  string addr = 3;
+  uint64 snapshot_ts = 4;
+  bool is_learner = 5;
 }
 
 message Request {
@@ -63,6 +99,10 @@ message Response {
 	map<string, string> uids = 12;
 	bytes rdf = 13;
 	map<string, ListOfString> hdrs = 14;
+}
+
+message SnapShotStreamResponse {
+    map<string, string> leaders = 1; // Key: Group Name, Value: Leader Address
 }
 
 message Mutation {
@@ -105,6 +145,10 @@ message Operation {
 // Worker services.
 message Payload {
 	bytes Data = 1;
+}
+
+message LeaderAlphas{
+	map<string, string> Alphas = 1;
 }
 
 message TxnContext {
@@ -185,6 +229,10 @@ message LoginRequest {
 	string password = 2;
 	string refresh_token = 3;
 	uint64 namespace = 4;
+}
+
+message InitiateSnapShotStreamRequest{
+	bool pdirstatus = 1;
 }
 
 message Jwt {
