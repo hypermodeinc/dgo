@@ -17,10 +17,11 @@ option go_package = "github.com/dgraph-io/dgo/v240/protos/api.v25";
 option java_package = "io.dgraph.v25";
 option java_outer_classname = "DgraphProto";
 
-service DgraphHM {
+service Dgraph {
   rpc Ping(PingRequest) returns (PingResponse) {}
 
   rpc LoginUser(LoginUserRequest) returns (LoginUserResponse) {}
+  rpc Alter(AlterRequest) returns (AlterResponse) {}
 
   rpc CreateNamespace(CreateNamespaceRequest) returns (CreateNamespaceResponse) {}
   rpc DropNamespace(DropNamespaceRequest) returns (DropNamespaceResponse) {}
@@ -37,11 +38,34 @@ message PingResponse {
 message LoginUserRequest {
   string user_id = 1;
   string password = 2;
+  string refresh_token = 3;
 }
 
 message LoginUserResponse {
   string access_jwt = 1;
   string refresh_jwt = 2;
+}
+
+message AlterRequest {
+  AlterOp op = 1;
+  string ns_name = 2;
+  string schema = 3;
+  bool run_in_background = 4;
+  string predicate_to_drop = 5;
+  string type_to_drop = 6;
+}
+
+message AlterResponse {}
+
+enum AlterOp {
+  NONE = 0;
+  DROP_ALL = 1;
+  DROP_ALL_IN_NS = 2;
+  DROP_DATA_IN_NS = 3;
+  DROP_PREDICATE_IN_NS = 4;
+  DROP_TYPE_IN_NS = 5;
+  GLOBAL_SCHEMA = 6;
+  SCHEMA_IN_NS = 7;
 }
 
 message CreateNamespaceRequest {
