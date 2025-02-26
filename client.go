@@ -37,7 +37,7 @@ type Dgraph struct {
 
 	conns []*grpc.ClientConn
 	dc    []api.DgraphClient
-	dcv25 []apiv25.DgraphHMClient
+	dcv25 []apiv25.DgraphClient
 }
 
 type authCreds struct {
@@ -62,9 +62,9 @@ func (a *authCreds) RequireTransportSecurity() bool {
 //
 // Deprecated: Use dgo.NewClient instead.
 func NewDgraphClient(clients ...api.DgraphClient) *Dgraph {
-	dcv25 := make([]apiv25.DgraphHMClient, len(clients))
+	dcv25 := make([]apiv25.DgraphClient, len(clients))
 	for i, client := range clients {
-		dcv25[i] = apiv25.NewDgraphHMClient(api.GetConn(client))
+		dcv25[i] = apiv25.NewDgraphClient(api.GetConn(client))
 	}
 	return &Dgraph{dc: clients, dcv25: dcv25}
 }
@@ -139,6 +139,8 @@ func (d *Dgraph) login(ctx context.Context, userid string, password string,
 }
 
 // GetJwt returns back the JWT for the dgraph client.
+//
+// Deprecated
 func (d *Dgraph) GetJwt() api.Jwt {
 	d.jwtMutex.RLock()
 	defer d.jwtMutex.RUnlock()
@@ -167,6 +169,8 @@ func (d *Dgraph) LoginIntoNamespace(ctx context.Context,
 //  1. Modify the schema.
 //  2. Drop a predicate.
 //  3. Drop the database.
+//
+// Deprecated: use SetSchema, SetSchemaInBackground, DropAll, DropPredicate, DropType instead.
 func (d *Dgraph) Alter(ctx context.Context, op *api.Operation) error {
 	dc := d.anyClient()
 	_, err := doWithRetryLogin(ctx, d, func() (*api.Payload, error) {
