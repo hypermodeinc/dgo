@@ -22,6 +22,7 @@ service Dgraph {
 
   rpc SignInUser(SignInUserRequest) returns (SignInUserResponse) {}
   rpc Alter(AlterRequest) returns (AlterResponse) {}
+  rpc RunDQL(RunDQLRequest) returns (RunDQLResponse) {}
 
   rpc CreateNamespace(CreateNamespaceRequest) returns (CreateNamespaceResponse) {}
   rpc DropNamespace(DropNamespaceRequest) returns (DropNamespaceResponse) {}
@@ -66,6 +67,16 @@ enum AlterOp {
   DROP_TYPE_IN_NS = 5;
   SCHEMA_IN_NS = 6;
 }
+
+message RunDQLRequest {
+  string query = 1;
+  map<string, string> vars = 2;
+
+  bool read_only = 3;
+  bool best_effort = 4;
+}
+
+message RunDQLResponse {}
 
 message CreateNamespaceRequest {
   string ns_name = 1;
