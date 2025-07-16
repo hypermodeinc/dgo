@@ -2,7 +2,7 @@ module github.com/dgraph-io/dgo/v250
 
 go 1.23.8
 
-toolchain go1.24.4
+toolchain go1.24.5
 
 require (
 	github.com/stretchr/testify v1.10.0
