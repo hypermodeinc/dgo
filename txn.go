@@ -36,7 +36,8 @@ var (
 //     is a no-op if Commit has already been called, so it's safe to defer a call
 //     to Discard immediately after NewTxn.
 type Txn struct {
-	context *api.TxnContext
+	context   *api.TxnContext
+	namespace string
 
 	keys  map[string]struct{}
 	preds map[string]struct{}
@@ -50,18 +51,39 @@ type Txn struct {
 	dc api.DgraphClient
 }
 
-// NewTxn creates a new transaction.
-func (d *Dgraph) NewTxn() *Txn {
-	return &Txn{
+// NewTxn creates a new transaction with optional configuration.
+// Options include WithReadOnly(), WithBestEffort(), and WithNamespace(namespace).
+func (d *Dgraph) NewTxn(opts ...TxnOption) *Txn {
+	txn := &Txn{
 		dg:      d,
 		dc:      d.anyClient(),
 		context: &api.TxnContext{},
 		keys:    make(map[string]struct{}),
 		preds:   make(map[string]struct{}),
 	}
+
+	// Apply options if provided
+	if len(opts) > 0 {
+		topts, err := buildTxnOptions(opts...)
+		if err != nil {
+			// In order to keep the API backwards compatible, we'll panic if an error is returned.
+			// At the moment, no TxnOption returns an error.
+			panic(err)
+		} else {
+			if !topts.readOnly && topts.bestEffort {
+				panic("Best effort only works for read-only queries.")
+			}
+			txn.readOnly = topts.readOnly
+			txn.bestEffort = topts.bestEffort
+			txn.namespace = topts.namespace
+		}
+	}
+
+	return txn
 }
 
 // NewReadOnlyTxn sets the txn to readonly transaction.
+// @deprecated Use NewTxn(dgo.WithReadOnly()) instead.
 func (d *Dgraph) NewReadOnlyTxn() *Txn {
 	txn := d.NewTxn()
 	txn.readOnly = true
@@ -74,6 +96,7 @@ func (d *Dgraph) NewReadOnlyTxn() *Txn {
 //
 // This method will panic if the transaction is not read-only.
 // Returns the transaction itself.
+// @deprecated Use NewTxn(dgo.WithBestEffort()) instead.
 func (txn *Txn) BestEffort() *Txn {
 	if !txn.readOnly {
 		panic("Best effort only works for read-only queries.")
@@ -164,6 +187,10 @@ func (txn *Txn) Do(ctx context.Context, req *api.Request) (*api.Response, error)
 	ctx = txn.dg.getContext(ctx)
 	req.StartTs = txn.context.StartTs
 	req.Hash = txn.context.Hash
+
+	if txn.namespace != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "namespace-str", txn.namespace)
+	}
 
 	// Append the GRPC Response headers to the responses. Needed for Cloud.
 	appendHdr := func(hdrs *metadata.MD, resp *api.Response) {
