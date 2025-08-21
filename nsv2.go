@@ -25,6 +25,7 @@ type txnOptions struct {
 	readOnly   bool
 	bestEffort bool
 	respFormat apiv2.RespFormat
+	namespace  string
 }
 
 // TxnOption is a function that modifies the txn options.
@@ -38,11 +39,24 @@ func WithReadOnly() TxnOption {
 	}
 }
 
-// WithBestEffort sets the txn to be best effort.
+// WithBestEffort sets the txn to be best effort. BestEffort queries will ask the Dgraph Alpha to
+// get timestamps from memory in a best effort to reduce the number of outbound requests to
+// Zero. This may yield improved latencies in read-bound datasets. BestEffort queries imply
+// read-only transactions.
 func WithBestEffort() TxnOption {
 	return func(o *txnOptions) error {
 		o.readOnly = true
 		o.bestEffort = true
+		return nil
+	}
+}
+
+// WithNamespace sets the namespace for the transaction. If the namespace is non-existent,
+// operations on the transaction will operate on the global namespace. You can ensure that the
+// namespace exists by using the `ListNamespaces` function.
+func WithNamespace(namespace string) TxnOption {
+	return func(o *txnOptions) error {
+		o.namespace = namespace
 		return nil
 	}
 }
@@ -61,21 +75,26 @@ func buildTxnOptions(opts ...TxnOption) (*txnOptions, error) {
 	return topts, nil
 }
 
-// RunDQL runs a DQL query in the given namespace. A DQL query could be a mutation
-// or a query or an upsert which is a combination of mutations and queries.
-func (d *Dgraph) RunDQL(ctx context.Context, nsName string, q string, opts ...TxnOption) (
+// RunDQL runs a DQL query. A DQL query could be a mutation or a query or an upsert which is a
+// combination of mutations and queries. The namespace is set via the WithNamespace option, if
+// not set, the global namespace is used.
+func (d *Dgraph) RunDQL(ctx context.Context, q string, opts ...TxnOption) (
 	*apiv2.RunDQLResponse, error) {
 
-	return d.RunDQLWithVars(ctx, nsName, q, nil, opts...)
+	return d.RunDQLWithVars(ctx, q, nil, opts...)
 }
 
 // RunDQLWithVars is like RunDQL with variables.
-func (d *Dgraph) RunDQLWithVars(ctx context.Context, nsName string, q string,
+func (d *Dgraph) RunDQLWithVars(ctx context.Context, q string,
 	vars map[string]string, opts ...TxnOption) (*apiv2.RunDQLResponse, error) {
 
 	topts, err := buildTxnOptions(opts...)
 	if err != nil {
 		return nil, err
+	}
+	nsName := RootNamespace
+	if topts.namespace != "" {
+		nsName = topts.namespace
 	}
 
 	req := &apiv2.RunDQLRequest{NsName: nsName, DqlQuery: q, Vars: vars,
