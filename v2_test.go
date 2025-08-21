@@ -53,6 +53,7 @@ func TestREADME(t *testing.T) {
 	// Run a query and check we got the result back
 	queryDQL := `{
 		alice(func: eq(name, "Alice")) {
+		  uid
 		  name
 		  email
 		  age
@@ -61,6 +62,7 @@ func TestREADME(t *testing.T) {
 	resp, err = client.RunDQL(ctx, dgo.RootNamespace, queryDQL)
 	require.NoError(t, err)
 	var m map[string][]struct {
+		Uid   string `json:"uid"`
 		Name  string `json:"name"`
 		Email string `json:"email"`
 		Age   int    `json:"age"`
@@ -73,6 +75,7 @@ func TestREADME(t *testing.T) {
 	// Run the query with variables
 	queryDQLWithVar := `query Alice($name: string) {
 		alice(func: eq(name, $name)) {
+		  uid
 		  name
 		  email
 		  age
@@ -101,6 +104,17 @@ func TestREADME(t *testing.T) {
 	require.Equal(t, m["alice"][0].Name, "Alice")
 	require.Equal(t, m["alice"][0].Email, "alice@example.com")
 	require.Equal(t, m["alice"][0].Age, 29)
+
+	// JSON Response, check that we can execute the JSON received from query response
+	// DQL with JSON Data format should be valid as per https://docs.hypermode.com/dgraph/dql/json
+	jsonBytes, marshallErr := json.Marshal(m["alice"])
+	require.NoError(t, marshallErr)
+	mutationDQL = fmt.Sprintf(`{
+		"set": %s
+	  }`, jsonBytes)
+	resp, err = client.RunDQL(ctx, dgo.RootNamespace, mutationDQL)
+	require.NoError(t, err)
+	require.Empty(t, resp.BlankUids)
 
 	// RDF Response, note that we can execute the RDFs received from query response
 	resp, err = client.RunDQL(ctx, dgo.RootNamespace, queryDQL, dgo.WithResponseFormat(apiv2.RespFormat_RDF))
