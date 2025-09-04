@@ -179,7 +179,8 @@ err := client.SetSchema(context.TODO(), dgo.RootNamespace, sch)
 
 ### Running a Mutation
 
-To run a mutation, use the `RunDQL` function.
+To run a mutation, use the `RunDQL` function. Note that the namespace is set via the `WithNamespace`
+option, if not set, the global namespace is used.
 
 ```go
 mutationDQL := `{
@@ -189,10 +190,17 @@ mutationDQL := `{
     _:alice <age> "29" .
   }
 }`
-resp, err := client.RunDQL(context.TODO(), dgo.RootNamespace, mutationDQL)
+resp, err := client.RunDQL(context.TODO(), mutationDQL)
 // Handle error
 // Print map of blank UIDs
 fmt.Printf("%+v\n", resp.BlankUids)
+
+// Perform this mutation in a already created namespace named "finance-graph"
+resp, err = client.RunDQL(context.TODO(), mutationDQL, dgo.WithNamespace("finance-graph"))
+// Handle error
+// Print map of blank UIDs
+fmt.Printf("%+v\n", resp.BlankUids)
+
 ```
 
 ### Running a Query
@@ -207,7 +215,7 @@ queryDQL := `{
     age
   }
 }`
-resp, err := client.RunDQL(context.TODO(), dgo.RootNamespace, queryDQL)
+resp, err := client.RunDQL(context.TODO(), queryDQL)
 // Handle error
 fmt.Printf("%s\n", resp.QueryResult)
 ```
@@ -225,7 +233,7 @@ queryDQL = `query Alice($name: string) {
   }
 }`
 vars := map[string]string{"$name": "Alice"}
-resp, err := client.RunDQLWithVars(context.TODO(), dgo.RootNamespace, queryDQL, vars)
+resp, err := client.RunDQLWithVars(context.TODO(), queryDQL, vars)
 // Handle error
 fmt.Printf("%s\n", resp.QueryResult)
 ```
@@ -242,7 +250,7 @@ queryDQL := `{
     age
   }
 }`
-resp, err := client.RunDQL(context.TODO(), dgo.RootNamespace, queryDQL, dgo.WithBestEffort())
+resp, err := client.RunDQL(context.TODO(), queryDQL, dgo.WithBestEffort())
 // Handle error
 fmt.Printf("%s\n", resp.QueryResult)
 ```
@@ -259,7 +267,24 @@ queryDQL := `{
     age
   }
 }`
-resp, err := client.RunDQL(context.TODO(), dgo.RootNamespace, queryDQL, dgo.WithReadOnly())
+resp, err := client.RunDQL(context.TODO(), queryDQL, dgo.WithReadOnly())
+// Handle error
+fmt.Printf("%s\n", resp.QueryResult)
+```
+
+### Running a Query in a Namespace
+
+To run a query in a namespace, use the same `RunDQL` function with `TxnOption`.
+
+```go
+queryDQL := `{
+  alice(func: eq(name, "Alice")) {
+    name
+    email
+    age
+  }
+}`
+resp, err := client.RunDQL(context.TODO(), queryDQL, dgo.WithNamespace("finance-graph"), dgo.WithReadOnly())
 // Handle error
 fmt.Printf("%s\n", resp.QueryResult)
 ```
@@ -358,6 +383,42 @@ namespaces, err := client.ListNamespaces(context.TODO())
 // Handle error
 fmt.Printf("%+v\n", namespaces)
 ```
+
+### v2 Transactions
+
+Transactions can be created using the `NewTxn` function. This is the same function that is available
+in the v1 APIs -- v2 adds a number of new options to the transaction including namepaces via the
+`WithNamespace` option.
+
+```go
+txn := dgraphClient.NewTxn()
+defer txn.Discard(ctx)
+```
+
+#### v2 Transactions with Namespaces
+
+```go
+txn := dgraphClient.NewTxn(dgo.WithNamespace("finance-graph"))
+defer txn.Discard(ctx)
+```
+
+Note that the namespace needs to exist in order for operations on this transaction to succeed.
+Operations may not explicitly fail if the namespace does not exist, and will operate on the global
+namespace instead. You can ensure that the namespace exists by using the `ListNamespaces` function.
+
+#### v2 Transactions with ReadOnly and BestEffort Options
+
+```go
+txn := dgraphClient.NewTxn(dgo.WithReadOnly())
+defer txn.Discard(ctx)
+```
+
+```go
+txn := dgraphClient.NewTxn(dgo.WithBestEffort())
+defer txn.Discard(ctx)
+```
+
+Note that `WithBestEffort` implies a `ReadOnly` transaction, so `WithReadOnly` is not needed.
 
 ## v1 APIs
 
@@ -675,9 +736,9 @@ dg.Alter(ctx, &op)
 
 ### Running tests
 
-Make sure you have `dgraph` installed in your GOPATH before you run the tests. The dgo test suite
-requires that a Dgraph cluster with ACL enabled be running locally. To start such a cluster, you may
-use the docker compose file located in the testing directory `t`.
+Make sure you have a linux-compatible `dgraph` binary installed in your $GOPATH/bin before you run
+the tests. The dgo test suite requires that a Dgraph cluster with ACL enabled be running locally. To
+start such a cluster, you may use the docker compose file located in the testing directory `t`.
 
 ```sh
 docker compose -f t/docker-compose.yml up -d
